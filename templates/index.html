@@ -6,17 +6,46 @@
     <title>Lions Flute - Audio FX Studio</title>
     <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
 </head>
 <body>
     <div class="container-fluid">
-        <!-- Header -->
-        <header class="py-4 mb-4 border-bottom">
+        <!-- Hero Header -->
+        <header class="hero-header py-5 mb-5">
             <div class="container">
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-music me-3 text-primary fs-2"></i>
-                    <h1 class="mb-0">Lions Flute</h1>
-                    <span class="badge bg-secondary ms-3">Audio FX Studio</span>
+                <div class="row align-items-center">
+                    <div class="col-lg-8">
+                        <div class="hero-content">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="logo-container me-4">
+                                    <i class="fas fa-music logo-icon"></i>
+                                    <div class="logo-glow"></div>
+                                </div>
+                                <div>
+                                    <h1 class="hero-title mb-2">Lions Flute</h1>
+                                    <p class="hero-subtitle mb-0">Professional Audio FX Studio</p>
+                                </div>
+                            </div>
+                            <p class="hero-description">Transform your audio with powerful effects, split vocals from instrumentals, and create professional-quality tracks.</p>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="hero-stats">
+                            <div class="stat-item">
+                                <i class="fas fa-file-audio text-primary"></i>
+                                <span>Multiple Formats Supported</span>
+                            </div>
+                            <div class="stat-item">
+                                <i class="fas fa-magic text-primary"></i>
+                                <span>7+ Audio Effects</span>
+                            </div>
+                            <div class="stat-item">
+                                <i class="fas fa-cut text-primary"></i>
+                                <span>AI-Powered Splitting</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </header>
@@ -31,22 +60,41 @@
             <!-- File Upload Section -->
             <div class="row mb-5">
                 <div class="col-12">
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="card-title mb-0">
-                                <i class="fas fa-upload me-2"></i>Upload Audio File
-                            </h3>
+                    <div class="card glass-card upload-card">
+                        <div class="card-header gradient-header">
+                            <div class="d-flex align-items-center">
+                                <div class="icon-wrapper me-3">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                </div>
+                                <div>
+                                    <h3 class="card-title mb-0">Upload Your Audio</h3>
+                                    <p class="card-subtitle mb-0">Drag & drop or click to select</p>
+                                </div>
+                            </div>
                         </div>
                         <div class="card-body">
                             <form id="upload-form">
-                                <div class="mb-3">
-                                    <label for="audio-file" class="form-label">Select Audio File</label>
-                                    <input type="file" class="form-control" id="audio-file" accept=".mp3,.wav,.flac,.aac,.m4a" required>
-                                    <div class="form-text">Supported formats: MP3, WAV, FLAC, AAC, M4A (Max 16MB)</div>
+                                <div class="upload-zone" id="upload-zone">
+                                    <div class="upload-content">
+                                        <i class="fas fa-file-audio upload-icon mb-3"></i>
+                                        <h5>Choose Audio File</h5>
+                                        <p class="text-muted mb-3">Drag and drop your audio file here or click to browse</p>
+                                        <input type="file" class="form-control d-none" id="audio-file" accept=".mp3,.wav,.flac,.aac,.m4a" required>
+                                        <div class="supported-formats">
+                                            <span class="format-badge">MP3</span>
+                                            <span class="format-badge">WAV</span>
+                                            <span class="format-badge">FLAC</span>
+                                            <span class="format-badge">AAC</span>
+                                            <span class="format-badge">M4A</span>
+                                        </div>
+                                        <small class="text-muted d-block mt-2">Maximum file size: 16MB</small>
+                                    </div>
                                 </div>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="fas fa-cloud-upload-alt me-2"></i>Upload
-                                </button>
+                                <div class="mt-4">
+                                    <button type="submit" class="btn btn-primary btn-lg gradient-btn">
+                                        <i class="fas fa-rocket me-2"></i>Process Audio
+                                    </button>
+                                </div>
                             </form>
                         </div>
                     </div>
@@ -55,48 +103,77 @@
 
             <!-- Audio Processing Section -->
             <div class="row mb-5" id="processing-section" style="display: none;">
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <h4 class="card-title mb-0">
-                                <i class="fas fa-cut me-2"></i>Split Audio
-                            </h4>
+                <div class="col-md-6 mb-4">
+                    <div class="card glass-card processing-card">
+                        <div class="card-header gradient-header">
+                            <div class="d-flex align-items-center">
+                                <div class="icon-wrapper me-3">
+                                    <i class="fas fa-cut"></i>
+                                </div>
+                                <div>
+                                    <h4 class="card-title mb-0">AI Audio Splitting</h4>
+                                    <p class="card-subtitle mb-0">Separate vocals & instrumentals</p>
+                                </div>
+                            </div>
                         </div>
                         <div class="card-body">
-                            <p class="card-text">Separate vocals from instrumentals</p>
-                            <button id="split-btn" class="btn btn-outline-primary">
-                                <i class="fas fa-scissors me-2"></i>Split Audio
+                            <div class="feature-preview mb-3">
+                                <div class="preview-item">
+                                    <i class="fas fa-microphone text-info"></i>
+                                    <span>Isolated Vocals</span>
+                                </div>
+                                <div class="preview-item">
+                                    <i class="fas fa-guitar text-warning"></i>
+                                    <span>Clean Instrumentals</span>
+                                </div>
+                            </div>
+                            <button id="split-btn" class="btn btn-outline-primary btn-lg w-100 action-btn">
+                                <i class="fas fa-scissors me-2"></i>Split Audio Now
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <div class="col-md-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <h4 class="card-title mb-0">
-                                <i class="fas fa-magic me-2"></i>Apply Effects
-                            </h4>
+                <div class="col-md-6 mb-4">
+                    <div class="card glass-card processing-card">
+                        <div class="card-header gradient-header">
+                            <div class="d-flex align-items-center">
+                                <div class="icon-wrapper me-3">
+                                    <i class="fas fa-magic"></i>
+                                </div>
+                                <div>
+                                    <h4 class="card-title mb-0">Audio Effects</h4>
+                                    <p class="card-subtitle mb-0">Professional sound enhancement</p>
+                                </div>
+                            </div>
                         </div>
                         <div class="card-body">
-                            <div class="mb-3">
-                                <label for="effect-select" class="form-label">Choose Effect</label>
-                                <select class="form-select" id="effect-select">
+                            <div class="mb-4">
+                                <label for="effect-select" class="form-label fw-bold">Choose Effect</label>
+                                <select class="form-select effect-select" id="effect-select">
                                     <option value="">Select an effect</option>
-                                    <option value="reverb">Reverb</option>
-                                    <option value="echo">Echo</option>
-                                    <option value="distortion">Distortion</option>
-                                    <option value="chorus">Chorus</option>
-                                    <option value="delay">Delay</option>
-                                    <option value="compressor">Compressor</option>
-                                    <option value="equalizer">Equalizer</option>
+                                    <option value="reverb" data-icon="fa-water">🌊 Reverb</option>
+                                    <option value="echo" data-icon="fa-volume-up">🔊 Echo</option>
+                                    <option value="distortion" data-icon="fa-bolt">⚡ Distortion</option>
+                                    <option value="chorus" data-icon="fa-users">👥 Chorus</option>
+                                    <option value="delay" data-icon="fa-clock">⏱️ Delay</option>
+                                    <option value="compressor" data-icon="fa-compress">📦 Compressor</option>
+                                    <option value="equalizer" data-icon="fa-sliders-h">🎛️ Equalizer</option>
                                 </select>
                             </div>
-                            <div class="mb-3">
-                                <label for="intensity-range" class="form-label">Intensity: <span id="intensity-value">50</span>%</label>
-                                <input type="range" class="form-range" id="intensity-range" min="0" max="100" value="50">
+                            <div class="mb-4">
+                                <label for="intensity-range" class="form-label fw-bold">
+                                    Effect Intensity: <span id="intensity-value" class="intensity-display">50</span>%
+                                </label>
+                                <div class="intensity-slider-container">
+                                    <input type="range" class="form-range intensity-slider" id="intensity-range" min="0" max="100" value="50">
+                                    <div class="slider-labels">
+                                        <span>Subtle</span>
+                                        <span>Intense</span>
+                                    </div>
+                                </div>
                             </div>
-                            <button id="apply-fx-btn" class="btn btn-outline-secondary">
+                            <button id="apply-fx-btn" class="btn btn-outline-secondary btn-lg w-100 action-btn">
                                 <i class="fas fa-wand-magic-sparkles me-2"></i>Apply Effect
                             </button>
                         </div>
@@ -107,14 +184,25 @@
             <!-- Results Section -->
             <div class="row mb-5" id="results-section" style="display: none;">
                 <div class="col-12">
-                    <div class="card">
-                        <div class="card-header">
-                            <h4 class="card-title mb-0">
-                                <i class="fas fa-download me-2"></i>Processed Files
-                            </h4>
+                    <div class="card glass-card results-card">
+                        <div class="card-header gradient-header">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center">
+                                    <div class="icon-wrapper me-3">
+                                        <i class="fas fa-download"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="card-title mb-0">Your Processed Files</h4>
+                                        <p class="card-subtitle mb-0">Ready for download</p>
+                                    </div>
+                                </div>
+                                <div class="results-count">
+                                    <span class="badge bg-success" id="files-count">0 files</span>
+                                </div>
+                            </div>
                         </div>
                         <div class="card-body">
-                            <div id="results-list">
+                            <div id="results-list" class="results-grid">
                                 <!-- Results will be populated here -->
                             </div>
                         </div>
@@ -124,13 +212,32 @@
         </div>
 
         <!-- Footer -->
-        <footer class="py-4 mt-5 border-top">
-            <div class="container text-center">
-                <p class="mb-0 text-muted">
-                    <i class="fas fa-music me-2"></i>Lions Flute Audio FX Studio
-                    <span class="mx-2">|</span>
-                    <span id="server-status" class="badge bg-success">Server Online</span>
-                </p>
+        <footer class="footer py-5 mt-5">
+            <div class="container">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center">
+                            <div class="footer-logo me-3">
+                                <i class="fas fa-music"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-1">Lions Flute</h6>
+                                <p class="mb-0 text-muted small">Professional Audio FX Studio</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <div class="server-status-container">
+                            <span class="me-2 text-muted">Server Status:</span>
+                            <span id="server-status" class="badge bg-success status-badge">
+                                <i class="fas fa-circle me-1"></i>Online
+                            </span>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">Powered by AI • Real-time Processing</small>
+                        </div>
+                    </div>
+                </div>
             </div>
         </footer>
     </div>

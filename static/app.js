@@ -34,6 +34,54 @@ class LionsFluteApp {
         document.getElementById('intensity-range').addEventListener('input', (e) => {
             this.updateIntensityDisplay(e.target.value);
         });
+
+        // Drag and drop functionality
+        this.setupDragAndDrop();
+
+        // Upload zone click handler
+        document.getElementById('upload-zone').addEventListener('click', () => {
+            document.getElementById('audio-file').click();
+        });
+    }
+
+    setupDragAndDrop() {
+        const uploadZone = document.getElementById('upload-zone');
+        const fileInput = document.getElementById('audio-file');
+
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadZone.addEventListener(eventName, this.preventDefaults, false);
+            document.body.addEventListener(eventName, this.preventDefaults, false);
+        });
+
+        // Highlight drop area when item is dragged over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadZone.addEventListener(eventName, () => {
+                uploadZone.classList.add('dragover');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadZone.addEventListener(eventName, () => {
+                uploadZone.classList.remove('dragover');
+            }, false);
+        });
+
+        // Handle dropped files
+        uploadZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (files.length > 0) {
+                fileInput.files = files;
+                this.handleFileUpload();
+            }
+        }, false);
+    }
+
+    preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
     }
 
     updateIntensityDisplay(value = 50) {
@@ -228,30 +276,47 @@ class LionsFluteApp {
             }
         });
         this.updateResultsList();
+        this.updateFilesCount();
     }
 
     updateResultsList() {
         const resultsList = document.getElementById('results-list');
         
         if (this.processedFiles.length === 0) {
-            resultsList.innerHTML = '<p class="text-muted">No processed files yet.</p>';
+            resultsList.innerHTML = '<div class="text-center text-muted"><i class="fas fa-folder-open fs-1 mb-3 opacity-50"></i><p>No processed files yet.</p></div>';
             return;
         }
 
-        const filesHTML = this.processedFiles.map(file => `
-            <div class="result-item d-flex justify-content-between align-items-center">
-                <div>
-                    <i class="fas ${file.icon} me-2 text-primary"></i>
-                    <strong>${file.name}</strong>
-                    <span class="badge bg-secondary ms-2">${file.type}</span>
+        const filesHTML = this.processedFiles.map((file, index) => `
+            <div class="result-item d-flex justify-content-between align-items-center" style="animation-delay: ${index * 0.1}s">
+                <div class="d-flex align-items-center">
+                    <div class="file-icon-wrapper me-3">
+                        <i class="fas ${file.icon}"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1">${file.name}</h6>
+                        <span class="badge bg-gradient text-white">${file.type}</span>
+                    </div>
                 </div>
-                <button class="btn btn-sm btn-outline-primary" onclick="app.downloadFile('${file.name}')">
+                <button class="btn btn-sm btn-outline-primary download-btn" onclick="app.downloadFile('${file.name}')">
                     <i class="fas fa-download me-1"></i>Download
                 </button>
             </div>
         `).join('');
 
         resultsList.innerHTML = filesHTML;
+    }
+
+    updateFilesCount() {
+        const countElement = document.getElementById('files-count');
+        const count = this.processedFiles.length;
+        countElement.textContent = `${count} file${count !== 1 ? 's' : ''}`;
+        
+        if (count > 0) {
+            countElement.className = 'badge bg-success';
+        } else {
+            countElement.className = 'badge bg-secondary';
+        }
     }
 
     async downloadFile(filename) {
