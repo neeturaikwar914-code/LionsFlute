@@ -92,8 +92,11 @@ class LionsFluteApp {
             const files = dt.files;
 
             if (files.length > 0) {
-                fileInput.files = files;
-                this.handleFileUpload();
+                // Create a new file input event
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(files[0]);
+                fileInput.files = dataTransfer.files;
+                this.loadAudioFile(files[0]);
             }
         }, false);
     }
@@ -152,9 +155,9 @@ class LionsFluteApp {
             return;
         }
 
-        // Validate file size (16MB limit)
-        if (file.size > 16 * 1024 * 1024) {
-            this.showStatus('File too large. Maximum size is 16MB', 'danger');
+        // Validate file size (50MB limit)
+        if (file.size > 50 * 1024 * 1024) {
+            this.showStatus('File too large. Maximum size is 50MB', 'danger');
             return;
         }
 
@@ -364,6 +367,11 @@ class LionsFluteApp {
                 const data = await response.json();
 
                 if (response.ok) {
+                    // Update progress if available
+                    if (data.progress !== undefined) {
+                        this.updateProgressBar(data.progress);
+                    }
+                    
                     if (data.status === 'completed') {
                         this.handleTaskCompletion(taskId, data, taskInfo);
                         completedTasks.push(taskId);
@@ -392,22 +400,36 @@ class LionsFluteApp {
 
     handleTaskCompletion(taskId, data, taskInfo) {
         if (data.type === 'split') {
-            this.addProcessedFiles([
-                { name: data.result.vocals, type: 'Vocals', icon: 'fa-microphone' },
-                { name: data.result.instruments, type: 'Instrumentals', icon: 'fa-guitar' }
-            ]);
+            const files = [];
+            if (data.result && data.result.vocals) {
+                files.push({ name: data.result.vocals, type: 'Vocals', icon: 'fa-microphone' });
+            }
+            if (data.result && data.result.instruments) {
+                files.push({ name: data.result.instruments, type: 'Instrumentals', icon: 'fa-guitar' });
+            }
+            this.addProcessedFiles(files);
             this.showStatus('Audio splitting completed successfully!', 'success');
             this.setLoadingState('split-btn', false);
         } else if (data.type === 'effect') {
             const { effect, intensity } = taskInfo.metadata;
-            this.addProcessedFiles([{
-                name: data.result.output_file,
-                type: `${effect} (${intensity}%)`,
-                icon: 'fa-magic'
-            }]);
+            if (data.result && data.result.output_file) {
+                this.addProcessedFiles([{
+                    name: data.result.output_file,
+                    type: `${effect} (${intensity}%)`,
+                    icon: 'fa-magic'
+                }]);
+            }
             this.showStatus(`${effect} effect applied successfully!`, 'success');
             this.setLoadingState('apply-fx-btn', false);
         }
+        
+        // Update progress to 100%
+        this.updateProgressBar(100);
+        
+        // Hide progress bar after a delay
+        setTimeout(() => {
+            this.hideProgressBar();
+        }, 1500);
         
         this.showResultsSection();
     }
@@ -423,12 +445,13 @@ class LionsFluteApp {
     }
 
     updateTaskProgress(taskId, data, taskInfo) {
-        // You could add a progress bar here in the future
-        console.log(`Task ${taskId} progress: ${data.progress}%`);
-        
-        if (data.progress > 0) {
-            const processingType = data.type === 'split' ? 'Splitting' : 'Processing';
-            this.showStatus(`${processingType} audio... ${data.progress}%`, 'info');
+        if (data.progress !== undefined) {
+            this.updateProgressBar(data.progress);
+            
+            if (data.progress > 0) {
+                const processingType = data.type === 'split' ? 'Splitting' : 'Processing';
+                this.showStatus(`${processingType} audio... ${data.progress}%`, 'info');
+            }
         }
     }
 
@@ -526,30 +549,41 @@ class LionsFluteApp {
 
     setupAudioEventListeners() {
         const audioElement = document.getElementById('audio-element');
-        const timeDisplay = document.getElementById('time-display');
-        const progressOverlay = document.getElementById('progress-overlay');
+        if (!audioElement) return;
 
-        audioElement.addEventListener('loadedmetadata', () => {
-            this.updateTimeDisplay();
-        });
+        // Remove existing listeners to prevent duplicates
+        audioElement.removeEventListener('loadedmetadata', this.audioMetadataHandler);
+        audioElement.removeEventListener('timeupdate', this.audioTimeUpdateHandler);
+        audioElement.removeEventListener('ended', this.audioEndedHandler);
 
-        audioElement.addEventListener('timeupdate', () => {
+        // Create bound handlers
+        this.audioMetadataHandler = () => this.updateTimeDisplay();
+        this.audioTimeUpdateHandler = () => {
             this.updateTimeDisplay();
             this.updateProgress();
-        });
+        };
+        this.audioEndedHandler = () => this.resetPlayButton();
 
-        audioElement.addEventListener('ended', () => {
-            this.resetPlayButton();
-        });
+        // Add new listeners
+        audioElement.addEventListener('loadedmetadata', this.audioMetadataHandler);
+        audioElement.addEventListener('timeupdate', this.audioTimeUpdateHandler);
+        audioElement.addEventListener('ended', this.audioEndedHandler);
     }
 
     togglePlayPause() {
         const audioElement = document.getElementById('audio-element');
         const playPauseBtn = document.getElementById('play-pause-btn');
+        
+        if (!audioElement || !playPauseBtn) return;
+        
         const icon = playPauseBtn.querySelector('i');
+        if (!icon) return;
 
         if (audioElement.paused) {
-            audioElement.play();
+            audioElement.play().catch(error => {
+                console.error('Audio play error:', error);
+                this.showStatus('Error playing audio', 'danger');
+            });
             icon.className = 'fas fa-pause';
         } else {
             audioElement.pause();
@@ -567,6 +601,8 @@ class LionsFluteApp {
         const audioElement = document.getElementById('audio-element');
         const timeDisplay = document.getElementById('time-display');
         
+        if (!audioElement || !timeDisplay) return;
+        
         const currentTime = this.formatTime(audioElement.currentTime);
         const duration = this.formatTime(audioElement.duration);
         
@@ -577,6 +613,8 @@ class LionsFluteApp {
         const audioElement = document.getElementById('audio-element');
         const progressOverlay = document.getElementById('progress-overlay');
         
+        if (!audioElement || !progressOverlay) return;
+        
         if (audioElement.duration) {
             const progress = (audioElement.currentTime / audioElement.duration) * 100;
             progressOverlay.style.width = `${progress}%`;
@@ -585,6 +623,8 @@ class LionsFluteApp {
 
     generateWaveform(filename) {
         const canvas = document.getElementById('waveform-canvas');
+        if (!canvas) return;
+        
         const ctx = canvas.getContext('2d');
         
         // Clear canvas
@@ -619,6 +659,24 @@ class LionsFluteApp {
         return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
     }
 
+    updateProgressBar(progress) {
+        const progressBar = document.getElementById('progress-bar');
+        const progressBarContainer = document.getElementById('progress-bar-container');
+        
+        if (progressBar && progressBarContainer) {
+            progressBar.style.width = `${Math.min(progress, 100)}%`;
+            progressBar.setAttribute('aria-valuenow', progress);
+            progressBarContainer.style.display = 'block';
+        }
+    }
+
+    hideProgressBar() {
+        const progressBarContainer = document.getElementById('progress-bar-container');
+        if (progressBarContainer) {
+            progressBarContainer.style.display = 'none';
+        }
+    }
+
     formatFileSize(bytes) {
         if (bytes === 0) return '0 B';
         
@@ -629,7 +687,18 @@ class LionsFluteApp {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
-    loadAudioFile(file) {
+    async loadAudioFile(file) {
+        // Validate file first
+        if (file.size > 50 * 1024 * 1024) {
+            this.showStatus('File too large. Maximum size is 50MB', 'danger');
+            return;
+        }
+
+        if (!this.hasValidExtension(file.name)) {
+            this.showStatus('Invalid file type. Please upload MP3, WAV, FLAC, AAC, or M4A files', 'danger');
+            return;
+        }
+
         // Create a form data object and trigger upload
         const formData = new FormData();
         formData.append('file', file);
@@ -637,8 +706,26 @@ class LionsFluteApp {
         // Show processing state
         this.showStatus('Uploading file...', 'info');
         
-        // Trigger the upload
-        this.handleFileUpload(formData);
+        try {
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                this.currentFile = data.filename;
+                this.showStatus(`File uploaded successfully: ${data.filename}`, 'success');
+                this.showAudioPlayer(data);
+                this.showProcessingSection();
+            } else {
+                this.showStatus(data.error || 'Upload failed', 'danger');
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            this.showStatus('Upload failed. Please try again.', 'danger');
+        }
     }
 }
 
