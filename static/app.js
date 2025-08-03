@@ -4,6 +4,8 @@ class LionsFluteApp {
     constructor() {
         this.currentFile = null;
         this.processedFiles = [];
+        this.activeTasks = new Map();
+        this.pollInterval = null;
         this.init();
     }
 
@@ -41,6 +43,23 @@ class LionsFluteApp {
         // Upload zone click handler
         document.getElementById('upload-zone').addEventListener('click', () => {
             document.getElementById('audio-file').click();
+        });
+
+        // Demo track button
+        document.getElementById('demo-btn').addEventListener('click', () => {
+            this.generateDemo();
+        });
+
+        // Audio player controls
+        document.getElementById('play-pause-btn').addEventListener('click', () => {
+            this.togglePlayPause();
+        });
+
+        // File input change handler
+        document.getElementById('audio-file').addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                this.loadAudioFile(e.target.files[0]);
+            }
         });
     }
 
@@ -162,6 +181,7 @@ class LionsFluteApp {
             if (response.ok) {
                 this.currentFile = data.filename;
                 this.showStatus(`File uploaded successfully: ${data.filename}`, 'success');
+                this.showAudioPlayer(data);
                 this.showProcessingSection();
             } else {
                 this.showStatus(data.error || 'Upload failed', 'danger');
@@ -202,19 +222,16 @@ class LionsFluteApp {
             const data = await response.json();
 
             if (response.ok) {
-                this.showStatus('Audio split successfully', 'success');
-                this.addProcessedFiles([
-                    { name: data.vocals, type: 'Vocals', icon: 'fa-microphone' },
-                    { name: data.music, type: 'Instrumentals', icon: 'fa-guitar' }
-                ]);
-                this.showResultsSection();
+                this.showStatus('Audio splitting started...', 'info');
+                this.trackTask(data.task_id, 'split');
+                this.startPolling();
             } else {
                 this.showStatus(data.error || 'Split failed', 'danger');
+                this.setLoadingState('split-btn', false);
             }
         } catch (error) {
             console.error('Split error:', error);
             this.showStatus('Split failed. Please try again.', 'danger');
-        } finally {
             this.setLoadingState('split-btn', false);
         }
     }
@@ -251,20 +268,16 @@ class LionsFluteApp {
             const data = await response.json();
 
             if (response.ok) {
-                this.showStatus(`${effect} effect applied successfully`, 'success');
-                this.addProcessedFiles([{
-                    name: data.output_file,
-                    type: `${effect} (${intensity}%)`,
-                    icon: 'fa-magic'
-                }]);
-                this.showResultsSection();
+                this.showStatus(`${effect} effect processing started...`, 'info');
+                this.trackTask(data.task_id, 'effect', { effect, intensity });
+                this.startPolling();
             } else {
                 this.showStatus(data.error || 'Effect application failed', 'danger');
+                this.setLoadingState('apply-fx-btn', false);
             }
         } catch (error) {
             console.error('Effect application error:', error);
             this.showStatus('Effect application failed. Please try again.', 'danger');
-        } finally {
             this.setLoadingState('apply-fx-btn', false);
         }
     }
@@ -319,18 +332,117 @@ class LionsFluteApp {
         }
     }
 
+    trackTask(taskId, type, metadata = {}) {
+        this.activeTasks.set(taskId, {
+            type,
+            metadata,
+            startTime: Date.now()
+        });
+    }
+
+    startPolling() {
+        if (this.pollInterval) return; // Already polling
+        
+        this.pollInterval = setInterval(async () => {
+            await this.checkTaskStatuses();
+        }, 2000); // Poll every 2 seconds
+    }
+
+    stopPolling() {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = null;
+        }
+    }
+
+    async checkTaskStatuses() {
+        const completedTasks = [];
+        
+        for (const [taskId, taskInfo] of this.activeTasks) {
+            try {
+                const response = await fetch(`/task/${taskId}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.status === 'completed') {
+                        this.handleTaskCompletion(taskId, data, taskInfo);
+                        completedTasks.push(taskId);
+                    } else if (data.status === 'failed') {
+                        this.handleTaskFailure(taskId, data, taskInfo);
+                        completedTasks.push(taskId);
+                    } else if (data.status === 'processing') {
+                        this.updateTaskProgress(taskId, data, taskInfo);
+                    }
+                }
+            } catch (error) {
+                console.error(`Error checking task ${taskId}:`, error);
+            }
+        }
+
+        // Remove completed tasks
+        completedTasks.forEach(taskId => {
+            this.activeTasks.delete(taskId);
+        });
+
+        // Stop polling if no active tasks
+        if (this.activeTasks.size === 0) {
+            this.stopPolling();
+        }
+    }
+
+    handleTaskCompletion(taskId, data, taskInfo) {
+        if (data.type === 'split') {
+            this.addProcessedFiles([
+                { name: data.result.vocals, type: 'Vocals', icon: 'fa-microphone' },
+                { name: data.result.instruments, type: 'Instrumentals', icon: 'fa-guitar' }
+            ]);
+            this.showStatus('Audio splitting completed successfully!', 'success');
+            this.setLoadingState('split-btn', false);
+        } else if (data.type === 'effect') {
+            const { effect, intensity } = taskInfo.metadata;
+            this.addProcessedFiles([{
+                name: data.result.output_file,
+                type: `${effect} (${intensity}%)`,
+                icon: 'fa-magic'
+            }]);
+            this.showStatus(`${effect} effect applied successfully!`, 'success');
+            this.setLoadingState('apply-fx-btn', false);
+        }
+        
+        this.showResultsSection();
+    }
+
+    handleTaskFailure(taskId, data, taskInfo) {
+        this.showStatus(`Processing failed: ${data.error}`, 'danger');
+        
+        if (data.type === 'split') {
+            this.setLoadingState('split-btn', false);
+        } else if (data.type === 'effect') {
+            this.setLoadingState('apply-fx-btn', false);
+        }
+    }
+
+    updateTaskProgress(taskId, data, taskInfo) {
+        // You could add a progress bar here in the future
+        console.log(`Task ${taskId} progress: ${data.progress}%`);
+        
+        if (data.progress > 0) {
+            const processingType = data.type === 'split' ? 'Splitting' : 'Processing';
+            this.showStatus(`${processingType} audio... ${data.progress}%`, 'info');
+        }
+    }
+
     async downloadFile(filename) {
         try {
-            const response = await fetch(`/download/${filename}`);
-            const data = await response.json();
-
-            if (response.ok) {
-                this.showStatus(`Download link generated for ${filename}`, 'info');
-                // In a real implementation, you would redirect to the download URL
-                console.log('Download URL:', data.download_url);
-            } else {
-                this.showStatus(data.error || 'Download failed', 'danger');
-            }
+            // Create a temporary link and trigger download
+            const link = document.createElement('a');
+            link.href = `/download/${filename}`;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            this.showStatus(`Downloading ${filename}...`, 'success');
         } catch (error) {
             console.error('Download error:', error);
             this.showStatus('Download failed. Please try again.', 'danger');
@@ -359,6 +471,174 @@ class LionsFluteApp {
             button.disabled = false;
             button.innerHTML = button.dataset.originalText || button.innerHTML;
         }
+    }
+
+    async generateDemo() {
+        try {
+            this.showStatus('Generating demo track...', 'info');
+            
+            const response = await fetch('/generate_demo', {
+                method: 'POST'
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                this.currentFile = data.filename;
+                this.showStatus('Demo track generated successfully!', 'success');
+                this.showAudioPlayer(data);
+                this.showProcessingSection();
+            } else {
+                this.showStatus(data.error || 'Demo generation failed', 'danger');
+            }
+        } catch (error) {
+            console.error('Demo generation error:', error);
+            this.showStatus('Demo generation failed. Please try again.', 'danger');
+        }
+    }
+
+    showAudioPlayer(fileData) {
+        const playerSection = document.getElementById('audio-player-section');
+        const fileNameElement = document.getElementById('current-file-name');
+        const fileInfoElement = document.getElementById('file-info');
+        const audioElement = document.getElementById('audio-element');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+
+        // Update file information
+        fileNameElement.textContent = fileData.filename;
+        fileInfoElement.textContent = `Duration: ${fileData.duration || '--'}s | Format: ${fileData.format || '--'} | Size: ${this.formatFileSize(fileData.size || 0)}`;
+
+        // Set audio source
+        audioElement.src = `/audio/${fileData.filename}`;
+        
+        // Enable play button
+        playPauseBtn.disabled = false;
+
+        // Show player
+        playerSection.style.display = 'block';
+
+        // Setup audio event listeners
+        this.setupAudioEventListeners();
+
+        // Generate waveform
+        this.generateWaveform(fileData.filename);
+    }
+
+    setupAudioEventListeners() {
+        const audioElement = document.getElementById('audio-element');
+        const timeDisplay = document.getElementById('time-display');
+        const progressOverlay = document.getElementById('progress-overlay');
+
+        audioElement.addEventListener('loadedmetadata', () => {
+            this.updateTimeDisplay();
+        });
+
+        audioElement.addEventListener('timeupdate', () => {
+            this.updateTimeDisplay();
+            this.updateProgress();
+        });
+
+        audioElement.addEventListener('ended', () => {
+            this.resetPlayButton();
+        });
+    }
+
+    togglePlayPause() {
+        const audioElement = document.getElementById('audio-element');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const icon = playPauseBtn.querySelector('i');
+
+        if (audioElement.paused) {
+            audioElement.play();
+            icon.className = 'fas fa-pause';
+        } else {
+            audioElement.pause();
+            icon.className = 'fas fa-play';
+        }
+    }
+
+    resetPlayButton() {
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const icon = playPauseBtn.querySelector('i');
+        icon.className = 'fas fa-play';
+    }
+
+    updateTimeDisplay() {
+        const audioElement = document.getElementById('audio-element');
+        const timeDisplay = document.getElementById('time-display');
+        
+        const currentTime = this.formatTime(audioElement.currentTime);
+        const duration = this.formatTime(audioElement.duration);
+        
+        timeDisplay.textContent = `${currentTime} / ${duration}`;
+    }
+
+    updateProgress() {
+        const audioElement = document.getElementById('audio-element');
+        const progressOverlay = document.getElementById('progress-overlay');
+        
+        if (audioElement.duration) {
+            const progress = (audioElement.currentTime / audioElement.duration) * 100;
+            progressOverlay.style.width = `${progress}%`;
+        }
+    }
+
+    generateWaveform(filename) {
+        const canvas = document.getElementById('waveform-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw a placeholder waveform (in real app, you'd analyze the audio)
+        this.drawPlaceholderWaveform(ctx, canvas.width, canvas.height);
+    }
+
+    drawPlaceholderWaveform(ctx, width, height) {
+        const centerY = height / 2;
+        const samples = 200;
+        const barWidth = width / samples;
+        
+        ctx.fillStyle = 'rgba(13, 202, 240, 0.6)';
+        
+        for (let i = 0; i < samples; i++) {
+            const x = i * barWidth;
+            const amplitude = Math.random() * 0.8 + 0.1;
+            const barHeight = amplitude * centerY;
+            
+            ctx.fillRect(x, centerY - barHeight, barWidth - 1, barHeight * 2);
+        }
+    }
+
+    formatTime(seconds) {
+        if (isNaN(seconds)) return '0:00';
+        
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.floor(seconds % 60);
+        
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    loadAudioFile(file) {
+        // Create a form data object and trigger upload
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // Show processing state
+        this.showStatus('Uploading file...', 'info');
+        
+        // Trigger the upload
+        this.handleFileUpload(formData);
     }
 }
 
