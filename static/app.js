@@ -1,6 +1,6 @@
 // ================= CONFIG =================
 
-const BASE_URL = window.location.origin;
+const BASE_URL = "https://lionsflute.onrender.com";
 
 // ================= MAIN FUNCTION =================
 
