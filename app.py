@@ -8,7 +8,6 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 from audio_processor import AudioProcessor
-from demo_generator import generate_demo_track
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,6 +16,8 @@ app.secret_key = os.environ.get("SESSION_SECRET", "production-secret")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 CORS(app)
+
+# ================= CONFIG =================
 
 UPLOAD_FOLDER = "uploads"
 PROCESSED_FOLDER = os.path.join(UPLOAD_FOLDER, "processed")
@@ -30,20 +31,46 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(PROCESSED_FOLDER, exist_ok=True)
 
 audio_processor = AudioProcessor(UPLOAD_FOLDER)
-
 processing_tasks = {}
+
+# ================= HELPERS =================
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# ================= HOME =================
 
 @app.route("/")
 def home():
     return render_template("index.html")
 
-# ================= UPLOAD =================
+# ================= SPLIT =================
 
-@app.route("/upload", methods=["POST"])
-def upload_file():
+def process_split_task(task_id, filename):
+    try:
+        processing_tasks[task_id]["status"] = "processing"
+        processing_tasks[task_id]["progress"] = 20
+
+        result = audio_processor.split_vocals_instruments(filename)
+
+        processing_tasks[task_id]["progress"] = 70
+
+        vocal_mp3 = audio_processor.convert_to_mp3(result["vocals"])
+        instrumental_mp3 = audio_processor.convert_to_mp3(result["instruments"])
+
+        processing_tasks[task_id]["status"] = "completed"
+        processing_tasks[task_id]["progress"] = 100
+        processing_tasks[task_id]["result"] = {
+            "vocal": vocal_mp3,
+            "instrumental": instrumental_mp3
+        }
+
+    except Exception as e:
+        processing_tasks[task_id]["status"] = "failed"
+        processing_tasks[task_id]["error"] = str(e)
+
+@app.route("/split", methods=["POST"])
+def split_audio():
     try:
         if "file" not in request.files:
             return jsonify({"error": "No file provided"}), 400
@@ -54,58 +81,11 @@ def upload_file():
             return jsonify({"error": "No file selected"}), 400
 
         if not allowed_file(file.filename):
-            return jsonify({"error": "Unsupported file format"}), 400
+            return jsonify({"error": "Unsupported format"}), 400
 
         filename = secure_filename(file.filename)
         filepath = os.path.join(UPLOAD_FOLDER, filename)
         file.save(filepath)
-
-        return jsonify({
-            "message": "Upload successful",
-            "filename": filename
-        }), 200
-
-    except Exception as e:
-        app.logger.error(f"Upload error: {str(e)}")
-        return jsonify({"error": "Upload failed"}), 500
-
-# ================= SPLIT PROCESS =================
-
-def process_split_task(task_id, filename):
-    try:
-        processing_tasks[task_id]["status"] = "processing"
-        processing_tasks[task_id]["progress"] = 10
-
-        result = audio_processor.split_vocals_instruments(filename)
-
-        processing_tasks[task_id]["progress"] = 70
-
-        vocals_mp3 = audio_processor.convert_to_mp3(result["vocals"])
-        instruments_mp3 = audio_processor.convert_to_mp3(result["instruments"])
-
-        processing_tasks[task_id]["status"] = "completed"
-        processing_tasks[task_id]["progress"] = 100
-        processing_tasks[task_id]["result"] = {
-            "vocals": vocals_mp3,
-            "instruments": instruments_mp3
-        }
-
-    except Exception as e:
-        processing_tasks[task_id]["status"] = "failed"
-        processing_tasks[task_id]["error"] = str(e)
-
-@app.route("/split", methods=["POST"])
-def split_audio():
-    try:
-        data = request.get_json()
-        filename = data.get("filename")
-
-        if not filename:
-            return jsonify({"error": "Filename required"}), 400
-
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        if not os.path.exists(filepath):
-            return jsonify({"error": "File not found"}), 404
 
         task_id = str(uuid.uuid4())
 
@@ -117,7 +97,10 @@ def split_audio():
             "created_at": time.time()
         }
 
-        thread = threading.Thread(target=process_split_task, args=(task_id, filename))
+        thread = threading.Thread(
+            target=process_split_task,
+            args=(task_id, filename)
+        )
         thread.daemon = True
         thread.start()
 
@@ -127,14 +110,14 @@ def split_audio():
         }), 200
 
     except Exception as e:
-        return jsonify({"error": "Split failed"}), 500
+        return jsonify({"error": str(e)}), 500
 
-# ================= EFFECT PROCESS =================
+# ================= EFFECT =================
 
 def process_effect_task(task_id, filename, effect, intensity):
     try:
         processing_tasks[task_id]["status"] = "processing"
-        processing_tasks[task_id]["progress"] = 20
+        processing_tasks[task_id]["progress"] = 30
 
         processed = audio_processor.apply_effect(filename, effect, intensity)
 
@@ -145,7 +128,7 @@ def process_effect_task(task_id, filename, effect, intensity):
         processing_tasks[task_id]["status"] = "completed"
         processing_tasks[task_id]["progress"] = 100
         processing_tasks[task_id]["result"] = {
-            "output_file": output_mp3
+            "output": output_mp3
         }
 
     except Exception as e:
@@ -155,17 +138,22 @@ def process_effect_task(task_id, filename, effect, intensity):
 @app.route("/apply_fx", methods=["POST"])
 def apply_fx():
     try:
-        data = request.get_json()
-        filename = data.get("filename")
-        effect = data.get("effect")
-        intensity = data.get("intensity", 50)
+        if "file" not in request.files:
+            return jsonify({"error": "No file provided"}), 400
 
-        if not filename or not effect:
-            return jsonify({"error": "Missing data"}), 400
+        file = request.files["file"]
+        effect = request.form.get("effect")
+        intensity = int(request.form.get("intensity", 50))
 
+        if file.filename == "":
+            return jsonify({"error": "No file selected"}), 400
+
+        if not effect:
+            return jsonify({"error": "Effect required"}), 400
+
+        filename = secure_filename(file.filename)
         filepath = os.path.join(UPLOAD_FOLDER, filename)
-        if not os.path.exists(filepath):
-            return jsonify({"error": "File not found"}), 404
+        file.save(filepath)
 
         task_id = str(uuid.uuid4())
 
@@ -177,7 +165,10 @@ def apply_fx():
             "created_at": time.time()
         }
 
-        thread = threading.Thread(target=process_effect_task, args=(task_id, filename, effect, intensity))
+        thread = threading.Thread(
+            target=process_effect_task,
+            args=(task_id, filename, effect, intensity)
+        )
         thread.daemon = True
         thread.start()
 
@@ -186,10 +177,10 @@ def apply_fx():
             "status": "processing"
         }), 200
 
-    except Exception:
-        return jsonify({"error": "Effect failed"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-# ================= TASK STATUS (FIXED FOR SPINNER) =================
+# ================= TASK STATUS =================
 
 @app.route("/task/<task_id>")
 def get_task_status(task_id):
@@ -203,8 +194,8 @@ def get_task_status(task_id):
 
     return jsonify({
         "task_id": task_id,
-        "status": task.get("status", "processing"),
-        "progress": task.get("progress", 0),
+        "status": task.get("status"),
+        "progress": task.get("progress"),
         "type": task.get("type"),
         "result": task.get("result", {}),
         "error": task.get("error")
@@ -229,7 +220,7 @@ def status():
     return jsonify({
         "status": "active",
         "service": "Lions Flute Audio FX API",
-        "version": "2.1.0",
+        "version": "3.0.0",
         "supported_formats": list(ALLOWED_EXTENSIONS),
         "max_file_size_mb": 50
     }), 200
@@ -238,7 +229,7 @@ def status():
 
 @app.errorhandler(413)
 def too_large(e):
-    return jsonify({"error": "File too large. Maximum size is 50MB"}), 413
+    return jsonify({"error": "File too large (max 50MB)"}), 413
 
 @app.errorhandler(404)
 def not_found(e):
@@ -248,5 +239,7 @@ def not_found(e):
 def internal_error(e):
     return jsonify({"error": "Internal server error"}), 500
 
+# ================= RUN =================
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
